@@ -98,7 +98,6 @@
  * (C) 2013 Segment.io Inc.
  */
 
-var _analytics = window.analytics;
 var Integrations = require('analytics.js-integrations');
 var Analytics = require('./analytics');
 var each = require('each');
@@ -126,7 +125,7 @@ exports.VERSION = require('../bower.json').version;
  * Add integrations.
  */
 
-each(Integrations, function (name, Integration) {
+each(Integrations, function(name, Integration) {
   analytics.use(Integration);
 });
 
@@ -17350,7 +17349,13 @@ function push(callback){
 }, {"analytics.js-integration":90,"next-tick":105,"bind":103,"when":133}],
 3: [function(require, module, exports) {
 
+/**
+ * Module dependencies.
+ */
+
 var _analytics = window.analytics;
+var Emitter = require('emitter');
+var Facade = require('facade');
 var after = require('after');
 var bind = require('bind');
 var callback = require('callback');
@@ -17359,29 +17364,25 @@ var cookie = require('./cookie');
 var debug = require('debug');
 var defaults = require('defaults');
 var each = require('each');
-var Emitter = require('emitter');
 var group = require('./group');
 var is = require('is');
-var isEmail = require('is-email');
 var isMeta = require('is-meta');
-var newDate = require('new-date');
+var keys = require('object').keys;
+var memory = require('./memory');
+var normalize = require('./normalize');
 var on = require('event').bind;
 var pageDefaults = require('./pageDefaults');
 var pick = require('pick');
 var prevent = require('prevent');
 var querystring = require('querystring');
-var normalize = require('./normalize');
 var size = require('object').length;
-var keys = require('object').keys;
-var memory = require('./memory');
 var store = require('./store');
 var user = require('./user');
-var Facade = require('facade');
-var Identify = Facade.Identify;
-var Group = Facade.Group;
 var Alias = Facade.Alias;
-var Track = Facade.Track;
+var Group = Facade.Group;
+var Identify = Facade.Identify;
 var Page = Facade.Page;
+var Track = Facade.Track;
 
 /**
  * Expose `Analytics`.
@@ -17401,13 +17402,14 @@ exports.memory = memory;
  * Initialize a new `Analytics` instance.
  */
 
-function Analytics () {
+function Analytics() {
   this._options({});
   this.Integrations = {};
   this._integrations = {};
   this._readied = false;
   this._timeout = 300;
-  this._user = user; // BACKWARDS COMPATIBILITY
+  // XXX: BACKWARDS COMPATIBILITY
+  this._user = user;
   this.log = debug('analytics.js');
   bind.all(this);
 
@@ -17431,7 +17433,7 @@ Emitter(Analytics.prototype);
  * @return {Analytics}
  */
 
-Analytics.prototype.use = function (plugin) {
+Analytics.prototype.use = function(plugin) {
   plugin(this);
   return this;
 };
@@ -17443,7 +17445,7 @@ Analytics.prototype.use = function (plugin) {
  * @return {Analytics}
  */
 
-Analytics.prototype.addIntegration = function (Integration) {
+Analytics.prototype.addIntegration = function(Integration) {
   var name = Integration.prototype.name;
   if (!name) throw new TypeError('attempted to add an invalid integration');
   this.Integrations[name] = Integration;
@@ -17451,16 +17453,16 @@ Analytics.prototype.addIntegration = function (Integration) {
 };
 
 /**
- * Initialize with the given integration `settings` and `options`. Aliased to
- * `init` for convenience.
+ * Initialize with the given integration `settings` and `options`.
  *
- * @param {Object} settings
- * @param {Object} options (optional)
+ * Aliased to `init` for convenience.
+ *
+ * @param {Object} [settings={}]
+ * @param {Object} [options={}]
  * @return {Analytics}
  */
 
-Analytics.prototype.init =
-Analytics.prototype.initialize = function (settings, options) {
+Analytics.prototype.init = Analytics.prototype.initialize = function(settings, options) {
   settings = settings || {};
   options = options || {};
 
@@ -17469,13 +17471,13 @@ Analytics.prototype.initialize = function (settings, options) {
 
   // clean unknown integrations from settings
   var self = this;
-  each(settings, function (name) {
+  each(settings, function(name) {
     var Integration = self.Integrations[name];
     if (!Integration) delete settings[name];
   });
 
   // add integrations
-  each(settings, function (name, opts) {
+  each(settings, function(name, opts) {
     var Integration = self.Integrations[name];
     var integration = new Integration(clone(opts));
     self.log('initialize %o - %o', name, opts);
@@ -17489,13 +17491,13 @@ Analytics.prototype.initialize = function (settings, options) {
   group.load();
 
   // make ready callback
-  var ready = after(size(integrations), function () {
+  var ready = after(size(integrations), function() {
     self._readied = true;
     self.emit('ready');
   });
 
   // initialize integrations, passing ready
-  each(integrations, function (name, integration) {
+  each(integrations, function(name, integration) {
     if (options.initialPageview && integration.options.initialPageview === false) {
       integration.page = after(2, integration.page);
     }
@@ -17538,17 +17540,20 @@ Analytics.prototype.add = function(integration){
 /**
  * Identify a user by optional `id` and `traits`.
  *
- * @param {String} id (optional)
- * @param {Object} traits (optional)
- * @param {Object} options (optional)
- * @param {Function} fn (optional)
+ * @param {string} [id=user.id()] User ID.
+ * @param {Object} [traits=null] User traits.
+ * @param {Object} [options=null]
+ * @param {Function} [fn]
  * @return {Analytics}
  */
 
-Analytics.prototype.identify = function (id, traits, options, fn) {
+Analytics.prototype.identify = function(id, traits, options, fn) {
+  // Argument reshuffling.
+  /* eslint-disable no-unused-expressions, no-sequences */
   if (is.fn(options)) fn = options, options = null;
   if (is.fn(traits)) fn = traits, options = null, traits = null;
   if (is.object(id)) options = traits, traits = id, id = user.id();
+  /* eslint-enable no-unused-expressions, no-sequences */
 
   // clone traits before we manipulate so we don't do anything uncouth, and take
   // from `user` so that we carryover anonymous traits
@@ -17557,7 +17562,7 @@ Analytics.prototype.identify = function (id, traits, options, fn) {
   var msg = this.normalize({
     options: options,
     traits: user.traits(),
-    userId: user.id(),
+    userId: user.id()
   });
 
   this._invoke('identify', new Identify(msg));
@@ -17574,7 +17579,7 @@ Analytics.prototype.identify = function (id, traits, options, fn) {
  * @return {Object}
  */
 
-Analytics.prototype.user = function () {
+Analytics.prototype.user = function() {
   return user;
 };
 
@@ -17582,18 +17587,20 @@ Analytics.prototype.user = function () {
  * Identify a group by optional `id` and `traits`. Or, if no arguments are
  * supplied, return the current group.
  *
- * @param {String} id (optional)
- * @param {Object} traits (optional)
- * @param {Object} options (optional)
- * @param {Function} fn (optional)
- * @return {Analytics or Object}
+ * @param {string} [id=group.id()] Group ID.
+ * @param {Object} [traits=null] Group traits.
+ * @param {Object} [options=null]
+ * @param {Function} [fn]
+ * @return {Analytics|Object}
  */
 
-Analytics.prototype.group = function (id, traits, options, fn) {
-  if (0 === arguments.length) return group;
+Analytics.prototype.group = function(id, traits, options, fn) {
+  /* eslint-disable no-unused-expressions, no-sequences */
+  if (!arguments.length) return group;
   if (is.fn(options)) fn = options, options = null;
   if (is.fn(traits)) fn = traits, options = null, traits = null;
   if (is.object(id)) options = traits, traits = id, id = group.id();
+  /* eslint-enable no-unused-expressions, no-sequences */
 
 
   // grab from group again to make sure we're taking from the source
@@ -17615,16 +17622,19 @@ Analytics.prototype.group = function (id, traits, options, fn) {
 /**
  * Track an `event` that a user has triggered with optional `properties`.
  *
- * @param {String} event
- * @param {Object} properties (optional)
- * @param {Object} options (optional)
- * @param {Function} fn (optional)
+ * @param {string} event
+ * @param {Object} [properties=null]
+ * @param {Object} [options=null]
+ * @param {Function} [fn]
  * @return {Analytics}
  */
 
-Analytics.prototype.track = function (event, properties, options, fn) {
+Analytics.prototype.track = function(event, properties, options, fn) {
+  // Argument reshuffling.
+  /* eslint-disable no-unused-expressions, no-sequences */
   if (is.fn(options)) fn = options, options = null;
   if (is.fn(properties)) fn = properties, options = null, properties = null;
+  /* eslint-enable no-unused-expressions, no-sequences */
 
   // figure out if the event is archived.
   var plan = this.options.plan || {};
@@ -17638,9 +17648,10 @@ Analytics.prototype.track = function (event, properties, options, fn) {
   });
 
   // plan.
-  if (plan = events[event]) {
+  plan = events[event];
+  if (plan) {
     this.log('plan %o - %o', event, plan);
-    if (false == plan.enabled) return this._callback(fn);
+    if (plan.enabled === false) return this._callback(fn);
     defaults(msg.integrations, plan.integrations || {});
   }
 
@@ -17657,21 +17668,21 @@ Analytics.prototype.track = function (event, properties, options, fn) {
  *
  * BACKWARDS COMPATIBILITY: aliased to `trackClick`.
  *
- * @param {Element or Array} links
- * @param {String or Function} event
- * @param {Object or Function} properties (optional)
+ * @param {Element|Array} links
+ * @param {string|Function} event
+ * @param {Object|Function} properties (optional)
  * @return {Analytics}
  */
 
-Analytics.prototype.trackClick =
-Analytics.prototype.trackLink = function (links, event, properties) {
+Analytics.prototype.trackClick = Analytics.prototype.trackLink = function(links, event, properties) {
   if (!links) return this;
-  if (is.element(links)) links = [links]; // always arrays, handles jquery
+  // always arrays, handles jquery
+  if (is.element(links)) links = [links];
 
   var self = this;
-  each(links, function (el) {
+  each(links, function(el) {
     if (!is.element(el)) throw new TypeError('Must pass HTMLElement to `analytics.trackLink`.');
-    on(el, 'click', function (e) {
+    on(el, 'click', function(e) {
       var ev = is.fn(event) ? event(el) : event;
       var props = is.fn(properties) ? properties(el) : properties;
       var href = el.getAttribute('href')
@@ -17682,7 +17693,7 @@ Analytics.prototype.trackLink = function (links, event, properties) {
 
       if (href && el.target !== '_blank' && !isMeta(e)) {
         prevent(e);
-        self._callback(function () {
+        self._callback(function() {
           window.location.href = href;
         });
       }
@@ -17698,34 +17709,34 @@ Analytics.prototype.trackLink = function (links, event, properties) {
  *
  * BACKWARDS COMPATIBILITY: aliased to `trackSubmit`.
  *
- * @param {Element or Array} forms
- * @param {String or Function} event
- * @param {Object or Function} properties (optional)
+ * @param {Element|Array} forms
+ * @param {string|Function} event
+ * @param {Object|Function} properties (optional)
  * @return {Analytics}
  */
 
-Analytics.prototype.trackSubmit =
-Analytics.prototype.trackForm = function (forms, event, properties) {
+Analytics.prototype.trackSubmit = Analytics.prototype.trackForm = function(forms, event, properties) {
   if (!forms) return this;
-  if (is.element(forms)) forms = [forms]; // always arrays, handles jquery
+  // always arrays, handles jquery
+  if (is.element(forms)) forms = [forms];
 
   var self = this;
-  each(forms, function (el) {
+  each(forms, function(el) {
     if (!is.element(el)) throw new TypeError('Must pass HTMLElement to `analytics.trackForm`.');
-    function handler (e) {
+    function handler(e) {
       prevent(e);
 
       var ev = is.fn(event) ? event(el) : event;
       var props = is.fn(properties) ? properties(el) : properties;
       self.track(ev, props);
 
-      self._callback(function () {
+      self._callback(function() {
         el.submit();
       });
     }
 
-    // support the events happening through jQuery or Zepto instead of through
-    // the normal DOM API, since `el.submit` doesn't bubble up events...
+    // Support the events happening through jQuery or Zepto instead of through
+    // the normal DOM API, because `el.submit` doesn't bubble up events...
     var $ = window.jQuery || window.Zepto;
     if ($) {
       $(el).submit(handler);
@@ -17741,21 +17752,24 @@ Analytics.prototype.trackForm = function (forms, event, properties) {
  * Trigger a pageview, labeling the current page with an optional `category`,
  * `name` and `properties`.
  *
- * @param {String} category (optional)
- * @param {String} name (optional)
- * @param {Object or String} properties (or path) (optional)
- * @param {Object} options (optional)
- * @param {Function} fn (optional)
+ * @param {string} [category]
+ * @param {string} [name]
+ * @param {Object|string} [properties] (or path)
+ * @param {Object} [options]
+ * @param {Function} [fn]
  * @return {Analytics}
  */
 
-Analytics.prototype.page = function (category, name, properties, options, fn) {
+Analytics.prototype.page = function(category, name, properties, options, fn) {
+  // Argument reshuffling.
+  /* eslint-disable no-unused-expressions, no-sequences */
   if (is.fn(options)) fn = options, options = null;
   if (is.fn(properties)) fn = properties, options = properties = null;
   if (is.fn(name)) fn = name, options = properties = name = null;
   if (is.object(category)) options = name, properties = category, name = category = null;
   if (is.object(name)) options = properties, properties = name, name = null;
   if (is.string(category) && !is.string(name)) name = category, category = null;
+  /* eslint-enable no-unused-expressions, no-sequences */
 
   properties = clone(properties) || {};
   if (name) properties.name = name;
@@ -17791,15 +17805,14 @@ Analytics.prototype.page = function (category, name, properties, options, fn) {
 };
 
 /**
- * BACKWARDS COMPATIBILITY: convert an old `pageview` to a `page` call.
+ * FIXME: BACKWARDS COMPATIBILITY: convert an old `pageview` to a `page` call.
  *
- * @param {String} url (optional)
- * @param {Object} options (optional)
+ * @param {string} [url]
  * @return {Analytics}
  * @api private
  */
 
-Analytics.prototype.pageview = function (url, options) {
+Analytics.prototype.pageview = function(url) {
   var properties = {};
   if (url) properties.path = url;
   this.page(properties);
@@ -17809,17 +17822,20 @@ Analytics.prototype.pageview = function (url, options) {
 /**
  * Merge two previously unassociated user identities.
  *
- * @param {String} to
- * @param {String} from (optional)
+ * @param {string} to
+ * @param {string} from (optional)
  * @param {Object} options (optional)
  * @param {Function} fn (optional)
  * @return {Analytics}
  */
 
-Analytics.prototype.alias = function (to, from, options, fn) {
+Analytics.prototype.alias = function(to, from, options, fn) {
+  // Argument reshuffling.
+  /* eslint-disable no-unused-expressions, no-sequences */
   if (is.fn(options)) fn = options, options = null;
   if (is.fn(from)) fn = from, options = null, from = null;
   if (is.object(from)) options = from, from = null;
+  /* eslint-enable no-unused-expressions, no-sequences */
 
   var msg = this.normalize({
     options: options,
@@ -17841,11 +17857,14 @@ Analytics.prototype.alias = function (to, from, options, fn) {
  * @return {Analytics}
  */
 
-Analytics.prototype.ready = function (fn) {
-  if (!is.fn(fn)) return this;
-  this._readied
-    ? callback.async(fn)
-    : this.once('ready', fn);
+Analytics.prototype.ready = function(fn) {
+  if (is.fn(fn)) {
+    if (this._readied) {
+      callback.async(fn);
+    } else {
+      this.once('ready', fn);
+    }
+  }
   return this;
 };
 
@@ -17855,18 +17874,18 @@ Analytics.prototype.ready = function (fn) {
  * @param {Number} timeout
  */
 
-Analytics.prototype.timeout = function (timeout) {
+Analytics.prototype.timeout = function(timeout) {
   this._timeout = timeout;
 };
 
 /**
  * Enable or disable debug.
  *
- * @param {String or Boolean} str
+ * @param {string|boolean} str
  */
 
 Analytics.prototype.debug = function(str){
-  if (0 == arguments.length || str) {
+  if (!arguments.length || str) {
     debug.enable('analytics:' + (str || '*'));
   } else {
     debug.disable();
@@ -17881,7 +17900,7 @@ Analytics.prototype.debug = function(str){
  * @api private
  */
 
-Analytics.prototype._options = function (options) {
+Analytics.prototype._options = function(options) {
   options = options || {};
   this.options = options;
   cookie.options(options.cookie);
@@ -17899,7 +17918,7 @@ Analytics.prototype._options = function (options) {
  * @api private
  */
 
-Analytics.prototype._callback = function (fn) {
+Analytics.prototype._callback = function(fn) {
   callback.async(fn, this._timeout);
   return this;
 };
@@ -17907,18 +17926,16 @@ Analytics.prototype._callback = function (fn) {
 /**
  * Call `method` with `facade` on all enabled integrations.
  *
- * @param {String} method
+ * @param {string} method
  * @param {Facade} facade
  * @return {Analytics}
  * @api private
  */
 
-Analytics.prototype._invoke = function (method, facade) {
-  var options = facade.options();
-
+Analytics.prototype._invoke = function(method, facade) {
   this.emit('invoke', facade);
 
-  each(this._integrations, function (name, integration) {
+  each(this._integrations, function(name, integration) {
     if (!facade.enabled(name)) return;
     integration.invoke.call(integration, method, facade);
   });
@@ -17957,7 +17974,7 @@ Analytics.prototype.reset = function(){
  * @api private
  */
 
-Analytics.prototype._parseQuery = function () {
+Analytics.prototype._parseQuery = function() {
   // Identify and track any `ajs_uid` and `ajs_event` parameters in the URL.
   var q = querystring.parse(window.location.search);
   if (q.ajs_uid) this.identify(q.ajs_uid);
@@ -17994,7 +18011,7 @@ Analytics.prototype.noConflict = function(){
 };
 
 
-}, {"after":113,"bind":196,"callback":96,"clone":97,"./cookie":197,"debug":192,"defaults":99,"each":4,"emitter":112,"./group":198,"is":93,"is-email":156,"is-meta":199,"new-date":148,"event":200,"./pageDefaults":201,"pick":202,"prevent":203,"querystring":204,"./normalize":205,"object":172,"./memory":206,"./store":207,"./user":208,"facade":134}],
+}, {"emitter":112,"facade":134,"after":113,"bind":196,"callback":96,"clone":97,"./cookie":197,"debug":192,"defaults":99,"each":4,"./group":198,"is":93,"is-meta":199,"object":172,"./memory":200,"./normalize":201,"event":202,"./pageDefaults":203,"pick":204,"prevent":205,"querystring":206,"./store":207,"./user":208}],
 196: [function(require, module, exports) {
 
 try {
@@ -18044,10 +18061,14 @@ function bindMethods (obj, methods) {
 }, {"bind":103,"bind-all":104}],
 197: [function(require, module, exports) {
 
-var debug = require('debug')('analytics.js:cookie');
+/**
+ * Module dependencies.
+ */
+
 var bind = require('bind');
-var cookie = require('cookie');
 var clone = require('clone');
+var cookie = require('cookie');
+var debug = require('debug')('analytics.js:cookie');
 var defaults = require('defaults');
 var json = require('json');
 var topDomain = require('top-domain');
@@ -18059,7 +18080,7 @@ var topDomain = require('top-domain');
  * @param {Object} options
  */
 
-function Cookie (options) {
+function Cookie(options) {
   this.options(options);
 }
 
@@ -18074,16 +18095,17 @@ function Cookie (options) {
  *   @field {Boolean} secure
  */
 
-Cookie.prototype.options = function (options) {
+Cookie.prototype.options = function(options) {
   if (arguments.length === 0) return this._options;
 
   options = options || {};
 
   var domain = '.' + topDomain(window.location.href);
-  if ('.' == domain) domain = null;
+  if (domain === '.') domain = null;
 
   this._options = defaults(options, {
-    maxage: 31536000000, // default to a year
+    // default to a year
+    maxage: 31536000000,
     path: '/',
     domain: domain
   });
@@ -18112,7 +18134,7 @@ Cookie.prototype.options = function (options) {
  * @return {Boolean} saved
  */
 
-Cookie.prototype.set = function (key, value) {
+Cookie.prototype.set = function(key, value) {
   try {
     value = json.stringify(value);
     cookie(key, value, clone(this._options));
@@ -18130,7 +18152,7 @@ Cookie.prototype.set = function (key, value) {
  * @return {Object} value
  */
 
-Cookie.prototype.get = function (key) {
+Cookie.prototype.get = function(key) {
   try {
     var value = cookie(key);
     value = value ? json.parse(value) : null;
@@ -18148,7 +18170,7 @@ Cookie.prototype.get = function (key) {
  * @return {Boolean} removed
  */
 
-Cookie.prototype.remove = function (key) {
+Cookie.prototype.remove = function(key) {
   try {
     cookie(key, null, clone(this._options));
     return true;
@@ -18171,7 +18193,7 @@ module.exports = bind.all(new Cookie());
 
 module.exports.Cookie = Cookie;
 
-}, {"debug":192,"bind":196,"cookie":185,"clone":97,"defaults":99,"json":166,"top-domain":209}],
+}, {"bind":196,"clone":97,"cookie":185,"debug":192,"defaults":99,"json":166,"top-domain":209}],
 209: [function(require, module, exports) {
 
 /**
@@ -18413,11 +18435,14 @@ function decode(value) {
 }, {"debug":192}],
 198: [function(require, module, exports) {
 
-var debug = require('debug')('analytics:group');
-var Entity = require('./entity');
-var inherit = require('inherit');
-var bind = require('bind');
+/**
+ * Module dependencies.
+ */
 
+var Entity = require('./entity');
+var bind = require('bind');
+var debug = require('debug')('analytics:group');
+var inherit = require('inherit');
 
 /**
  * Group defaults
@@ -18440,7 +18465,7 @@ Group.defaults = {
  * @param {Object} options
  */
 
-function Group (options) {
+function Group(options) {
   this.defaults = Group.defaults;
   this.debug = debug;
   Entity.call(this, options);
@@ -18467,17 +18492,17 @@ module.exports = bind.all(new Group());
 
 module.exports.Group = Group;
 
-}, {"debug":192,"./entity":211,"inherit":212,"bind":196}],
+}, {"./entity":211,"bind":196,"debug":192,"inherit":212}],
 211: [function(require, module, exports) {
 
-var debug = require('debug')('analytics:entity');
-var traverse = require('isodate-traverse');
-var defaults = require('defaults');
-var memory = require('./memory');
-var cookie = require('./cookie');
-var store = require('./store');
-var extend = require('extend');
 var clone = require('clone');
+var cookie = require('./cookie');
+var debug = require('debug')('analytics:entity');
+var defaults = require('defaults');
+var extend = require('extend');
+var memory = require('./memory');
+var store = require('./store');
+var isodateTraverse = require('isodate-traverse');
 
 
 /**
@@ -18493,7 +18518,7 @@ module.exports = Entity;
  * @param {Object} options
  */
 
-function Entity(options){
+function Entity(options) {
   this.options(options);
   this.initialize();
 }
@@ -18505,7 +18530,7 @@ function Entity(options){
  * otherwise fallsback to localStorage.
  */
 
-Entity.prototype.initialize = function(){
+Entity.prototype.initialize = function() {
   cookie.set('ajs:cookies', true);
 
   // cookies are enabled.
@@ -18530,7 +18555,7 @@ Entity.prototype.initialize = function(){
  * Get the storage.
  */
 
-Entity.prototype.storage = function(){
+Entity.prototype.storage = function() {
   return this._storage;
 };
 
@@ -18544,11 +18569,9 @@ Entity.prototype.storage = function(){
  *   @property {Boolean} persist (default: `true`)
  */
 
-Entity.prototype.options = function (options) {
+Entity.prototype.options = function(options) {
   if (arguments.length === 0) return this._options;
-  options || (options = {});
-  defaults(options, this.defaults || {});
-  this._options = options;
+  this._options = defaults(options || {}, this.defaults || {});
 };
 
 
@@ -18558,10 +18581,12 @@ Entity.prototype.options = function (options) {
  * @param {String} id
  */
 
-Entity.prototype.id = function (id) {
+Entity.prototype.id = function(id) {
   switch (arguments.length) {
     case 0: return this._getId();
     case 1: return this._setId(id);
+    default:
+      // No default case
   }
 };
 
@@ -18572,7 +18597,7 @@ Entity.prototype.id = function (id) {
  * @return {String}
  */
 
-Entity.prototype._getId = function () {
+Entity.prototype._getId = function() {
   var ret = this._options.persist
     ? this.storage().get(this._options.cookie.key)
     : this._id;
@@ -18586,7 +18611,7 @@ Entity.prototype._getId = function () {
  * @param {String} id
  */
 
-Entity.prototype._setId = function (id) {
+Entity.prototype._setId = function(id) {
   if (this._options.persist) {
     this.storage().set(this._options.cookie.key, id);
   } else {
@@ -18603,11 +18628,12 @@ Entity.prototype._setId = function (id) {
  * @param {Object} traits
  */
 
-Entity.prototype.properties =
-Entity.prototype.traits = function (traits) {
+Entity.prototype.properties = Entity.prototype.traits = function(traits) {
   switch (arguments.length) {
     case 0: return this._getTraits();
     case 1: return this._setTraits(traits);
+    default:
+      // No default case
   }
 };
 
@@ -18619,11 +18645,9 @@ Entity.prototype.traits = function (traits) {
  * @return {Object}
  */
 
-Entity.prototype._getTraits = function () {
-  var ret = this._options.persist
-    ? store.get(this._options.localStorage.key)
-    : this._traits;
-  return ret ? traverse(clone(ret)) : {};
+Entity.prototype._getTraits = function() {
+  var ret = this._options.persist ? store.get(this._options.localStorage.key) : this._traits;
+  return ret ? isodateTraverse(clone(ret)) : {};
 };
 
 
@@ -18633,8 +18657,8 @@ Entity.prototype._getTraits = function () {
  * @param {Object} traits
  */
 
-Entity.prototype._setTraits = function (traits) {
-  traits || (traits = {});
+Entity.prototype._setTraits = function(traits) {
+  traits = traits || {};
   if (this._options.persist) {
     store.set(this._options.localStorage.key, traits);
   } else {
@@ -18651,8 +18675,8 @@ Entity.prototype._setTraits = function (traits) {
  * @param {Object} traits
  */
 
-Entity.prototype.identify = function (id, traits) {
-  traits || (traits = {});
+Entity.prototype.identify = function(id, traits) {
+  traits = traits || {};
   var current = this.id();
   if (current === null || current === id) traits = extend(this.traits(), traits);
   if (id) this.id(id);
@@ -18668,7 +18692,7 @@ Entity.prototype.identify = function (id, traits) {
  * @return {Boolean}
  */
 
-Entity.prototype.save = function () {
+Entity.prototype.save = function() {
   if (!this._options.persist) return false;
   cookie.set(this._options.cookie.key, this.id());
   store.set(this._options.localStorage.key, this.traits());
@@ -18680,7 +18704,7 @@ Entity.prototype.save = function () {
  * Log the entity out, reseting `id` and `traits` to defaults.
  */
 
-Entity.prototype.logout = function () {
+Entity.prototype.logout = function() {
   this.id(null);
   this.traits({});
   cookie.remove(this._options.cookie.key);
@@ -18692,7 +18716,7 @@ Entity.prototype.logout = function () {
  * Reset all entity state, logging out and returning options to defaults.
  */
 
-Entity.prototype.reset = function () {
+Entity.prototype.reset = function() {
   this.logout();
   this.options({});
 };
@@ -18702,21 +18726,22 @@ Entity.prototype.reset = function () {
  * Load saved entity `id` or `traits` from storage.
  */
 
-Entity.prototype.load = function () {
+Entity.prototype.load = function() {
   this.id(cookie.get(this._options.cookie.key));
   this.traits(store.get(this._options.localStorage.key));
 };
 
 
-}, {"debug":192,"isodate-traverse":144,"defaults":99,"./memory":206,"./cookie":197,"./store":207,"extend":132,"clone":97}],
-206: [function(require, module, exports) {
+}, {"clone":97,"./cookie":197,"debug":192,"defaults":99,"extend":132,"./memory":200,"./store":207,"isodate-traverse":144}],
+200: [function(require, module, exports) {
+/* eslint consistent-return:1 */
 
 /**
  * Module Dependencies.
  */
 
-var clone = require('clone');
 var bind = require('bind');
+var clone = require('clone');
 
 /**
  * HOP.
@@ -18728,7 +18753,7 @@ var has = Object.prototype.hasOwnProperty;
  * Expose `Memory`
  */
 
-module.exports = bind.all(new Memory);
+module.exports = bind.all(new Memory());
 
 /**
  * Initialize `Memory` store
@@ -18773,13 +18798,17 @@ Memory.prototype.remove = function(key){
   delete this.store[key];
   return true;
 };
-}, {"clone":97,"bind":196}],
+
+}, {"bind":196,"clone":97}],
 207: [function(require, module, exports) {
+
+/**
+ * Module dependencies.
+ */
 
 var bind = require('bind');
 var defaults = require('defaults');
 var store = require('store.js');
-
 
 /**
  * Initialize a new `Store` with `options`.
@@ -18787,10 +18816,9 @@ var store = require('store.js');
  * @param {Object} options
  */
 
-function Store (options) {
+function Store(options) {
   this.options(options);
 }
-
 
 /**
  * Set the `options` for the store.
@@ -18799,13 +18827,13 @@ function Store (options) {
  *   @field {Boolean} enabled (true)
  */
 
-Store.prototype.options = function (options) {
+Store.prototype.options = function(options) {
   if (arguments.length === 0) return this._options;
 
   options = options || {};
-  defaults(options, { enabled : true });
+  defaults(options, { enabled: true });
 
-  this.enabled  = options.enabled && store.enabled;
+  this.enabled = options.enabled && store.enabled;
   this._options = options;
 };
 
@@ -18813,11 +18841,11 @@ Store.prototype.options = function (options) {
 /**
  * Set a `key` and `value` in local storage.
  *
- * @param {String} key
+ * @param {string} key
  * @param {Object} value
  */
 
-Store.prototype.set = function (key, value) {
+Store.prototype.set = function(key, value) {
   if (!this.enabled) return false;
   return store.set(key, value);
 };
@@ -18826,11 +18854,11 @@ Store.prototype.set = function (key, value) {
 /**
  * Get a value from local storage by `key`.
  *
- * @param {String} key
+ * @param {string} key
  * @return {Object}
  */
 
-Store.prototype.get = function (key) {
+Store.prototype.get = function(key) {
   if (!this.enabled) return null;
   return store.get(key);
 };
@@ -18839,10 +18867,10 @@ Store.prototype.get = function (key) {
 /**
  * Remove a value from local storage by `key`.
  *
- * @param {String} key
+ * @param {string} key
  */
 
-Store.prototype.remove = function (key) {
+Store.prototype.remove = function(key) {
   if (!this.enabled) return false;
   return store.remove(key);
 };
@@ -19040,7 +19068,217 @@ module.exports = function isMeta (e) {
     return false;
 };
 }, {}],
-200: [function(require, module, exports) {
+201: [function(require, module, exports) {
+
+/**
+ * Module Dependencies.
+ */
+
+var debug = require('debug')('analytics.js:normalize');
+var defaults = require('defaults');
+var each = require('each');
+var includes = require('includes');
+var is = require('is');
+var map = require('component/map');
+
+/**
+ * HOP.
+ */
+
+var has = Object.prototype.hasOwnProperty;
+
+/**
+ * Expose `normalize`
+ */
+
+module.exports = normalize;
+
+/**
+ * Toplevel properties.
+ */
+
+var toplevel = [
+  'integrations',
+  'anonymousId',
+  'timestamp',
+  'context'
+];
+
+/**
+ * Normalize `msg` based on integrations `list`.
+ *
+ * @param {Object} msg
+ * @param {Array} list
+ * @return {Function}
+ */
+
+function normalize(msg, list){
+  var lower = map(list, function(s){ return s.toLowerCase(); });
+  var opts = msg.options || {};
+  var integrations = opts.integrations || {};
+  var providers = opts.providers || {};
+  var context = opts.context || {};
+  var ret = {};
+  debug('<-', msg);
+
+  // integrations.
+  each(opts, function(key, value){
+    if (!integration(key)) return;
+    if (!has.call(integrations, key)) integrations[key] = value;
+    delete opts[key];
+  });
+
+  // providers.
+  delete opts.providers;
+  each(providers, function(key, value){
+    if (!integration(key)) return;
+    if (is.object(integrations[key])) return;
+    if (has.call(integrations, key) && typeof providers[key] === 'boolean') return;
+    integrations[key] = value;
+  });
+
+  // move all toplevel options to msg
+  // and the rest to context.
+  each(opts, function(key){
+    if (includes(key, toplevel)) {
+      ret[key] = opts[key];
+    } else {
+      context[key] = opts[key];
+    }
+  });
+
+  // cleanup
+  delete msg.options;
+  ret.integrations = integrations;
+  ret.context = context;
+  ret = defaults(ret, msg);
+  debug('->', ret);
+  return ret;
+
+  function integration(name){
+    return !!(includes(name, list) || name.toLowerCase() === 'all' || includes(name.toLowerCase(), lower));
+  }
+}
+
+}, {"debug":192,"defaults":99,"each":4,"includes":214,"is":93,"component/map":215}],
+214: [function(require, module, exports) {
+'use strict';
+
+/**
+ * Module dependencies.
+ */
+
+// XXX: Hacky fix for duo not supporting scoped npm packages
+var each; try { each = require('@ndhoule/each'); } catch(e) { each = require('each'); }
+
+/**
+ * String#indexOf reference.
+ */
+
+var strIndexOf = String.prototype.indexOf;
+
+/**
+ * Object.is/sameValueZero polyfill.
+ *
+ * @api private
+ * @param {*} value1
+ * @param {*} value2
+ * @return {boolean}
+ */
+
+// TODO: Move to library
+var sameValueZero = function sameValueZero(value1, value2) {
+  // Normal values and check for 0 / -0
+  if (value1 === value2) {
+    return value1 !== 0 || 1 / value1 === 1 / value2;
+  }
+  // NaN
+  return value1 !== value1 && value2 !== value2;
+};
+
+/**
+ * Searches a given `collection` for a value, returning true if the collection
+ * contains the value and false otherwise. Can search strings, arrays, and
+ * objects.
+ *
+ * @name includes
+ * @api public
+ * @param {*} searchElement The element to search for.
+ * @param {Object|Array|string} collection The collection to search.
+ * @return {boolean}
+ * @example
+ * includes(2, [1, 2, 3]);
+ * //=> true
+ *
+ * includes(4, [1, 2, 3]);
+ * //=> false
+ *
+ * includes(2, { a: 1, b: 2, c: 3 });
+ * //=> true
+ *
+ * includes('a', { a: 1, b: 2, c: 3 });
+ * //=> false
+ *
+ * includes('abc', 'xyzabc opq');
+ * //=> true
+ *
+ * includes('nope', 'xyzabc opq');
+ * //=> false
+ */
+var includes = function includes(searchElement, collection) {
+  var found = false;
+
+  // Delegate to String.prototype.indexOf when `collection` is a string
+  if (typeof collection === 'string') {
+    return strIndexOf.call(collection, searchElement) !== -1;
+  }
+
+  // Iterate through enumerable/own array elements and object properties.
+  each(function(value) {
+    if (sameValueZero(value, searchElement)) {
+      found = true;
+      // Exit iteration early when found
+      return false;
+    }
+  }, collection);
+
+  return found;
+};
+
+/**
+ * Exports.
+ */
+
+module.exports = includes;
+
+}, {"each":170}],
+215: [function(require, module, exports) {
+
+/**
+ * Module dependencies.
+ */
+
+var toFunction = require('to-function');
+
+/**
+ * Map the given `arr` with callback `fn(val, i)`.
+ *
+ * @param {Array} arr
+ * @param {Function} fn
+ * @return {Array}
+ * @api public
+ */
+
+module.exports = function(arr, fn){
+  var ret = [];
+  fn = toFunction(fn);
+  for (var i = 0; i < arr.length; ++i) {
+    ret.push(fn(arr[i], i));
+  }
+  return ret;
+};
+}, {"to-function":176}],
+202: [function(require, module, exports) {
 
 /**
  * Bind `el` event `type` to `fn`.
@@ -19083,13 +19321,14 @@ exports.unbind = function(el, type, fn, capture){
 };
 
 }, {}],
-201: [function(require, module, exports) {
+203: [function(require, module, exports) {
 
 /**
  * Module dependencies.
  */
 
 var canonical = require('canonical');
+var includes = require('includes');
 var url = require('url');
 
 /**
@@ -19113,10 +19352,10 @@ function pageDefaults() {
 /**
  * Return the canonical path for the page.
  *
- * @return {String}
+ * @return {string}
  */
 
-function canonicalPath () {
+function canonicalPath() {
   var canon = canonical();
   if (!canon) return window.location.pathname;
   var parsed = url.parse(canon);
@@ -19127,16 +19366,16 @@ function canonicalPath () {
  * Return the canonical URL for the page concat the given `search`
  * and strip the hash.
  *
- * @param {String} search
- * @return {String}
+ * @param {string} search
+ * @return {string}
  */
 
-function canonicalUrl (search) {
+function canonicalUrl(search) {
   var canon = canonical();
-  if (canon) return ~canon.indexOf('?') ? canon : canon + search;
+  if (canon) return includes('?', canon) ? canon : canon + search;
   var url = window.location.href;
   var i = url.indexOf('#');
-  return -1 === i ? url : url.slice(0, i);
+  return i === -1 ? url : url.slice(0, i);
 }
 
 /**
@@ -19145,8 +19384,8 @@ function canonicalUrl (search) {
 
 module.exports = pageDefaults;
 
-}, {"canonical":173,"url":175}],
-202: [function(require, module, exports) {
+}, {"canonical":173,"includes":214,"url":175}],
+204: [function(require, module, exports) {
 'use strict';
 
 var objToString = Object.prototype.toString;
@@ -19222,7 +19461,7 @@ var pick = function pick(props, object) {
 module.exports = pick;
 
 }, {}],
-203: [function(require, module, exports) {
+205: [function(require, module, exports) {
 
 /**
  * prevent default on the given `e`.
@@ -19245,7 +19484,7 @@ module.exports = function(e){
 };
 
 }, {}],
-204: [function(require, module, exports) {
+206: [function(require, module, exports) {
 
 /**
  * Module dependencies.
@@ -19321,135 +19560,19 @@ exports.stringify = function(obj){
 };
 
 }, {"trim":128,"type":7}],
-205: [function(require, module, exports) {
-
-/**
- * Module Dependencies.
- */
-
-var debug = require('debug')('analytics.js:normalize');
-var indexof = require('component/indexof');
-var defaults = require('defaults');
-var map = require('component/map');
-var each = require('each');
-var is = require('is');
-
-/**
- * HOP.
- */
-
-var has = Object.prototype.hasOwnProperty;
-
-/**
- * Expose `normalize`
- */
-
-module.exports = normalize;
-
-/**
- * Toplevel properties.
- */
-
-var toplevel = [
-  'integrations',
-  'anonymousId',
-  'timestamp',
-  'context'
-];
-
-/**
- * Normalize `msg` based on integrations `list`.
- *
- * @param {Object} msg
- * @param {Array} list
- * @return {Function}
- */
-
-function normalize(msg, list){
-  var lower = map(list, function(s){ return s.toLowerCase(); });
-  var opts = msg.options || {};
-  var integrations = opts.integrations || {};
-  var providers = opts.providers || {};
-  var context = opts.context || {};
-  var ret = {};
-  debug('<-', msg);
-
-  // integrations.
-  each(opts, function(key, value){
-    if (!integration(key)) return;
-    if (!has.call(integrations, key)) integrations[key] = value;
-    delete opts[key];
-  });
-
-  // providers.
-  delete opts.providers;
-  each(providers, function(key, value){
-    if (!integration(key)) return;
-    if (is.object(integrations[key])) return;
-    if (has.call(integrations, key) && 'boolean' == typeof providers[key]) return;
-    integrations[key] = value;
-  });
-
-  // move all toplevel options to msg
-  // and the rest to context.
-  each(opts, function(key){
-    if (~indexof(toplevel, key)) {
-      ret[key] = opts[key];
-    } else {
-      context[key] = opts[key];
-    }
-  });
-
-  // cleanup
-  delete msg.options;
-  ret.integrations = integrations;
-  ret.context = context;
-  ret = defaults(ret, msg);
-  debug('->', ret);
-  return ret;
-
-  function integration(name){
-    return !! (~indexof(list, name)
-      || 'all' == name.toLowerCase()
-      || ~indexof(lower, name.toLowerCase()));
-  }
-}
-}, {"debug":192,"component/indexof":118,"defaults":99,"component/map":214,"each":4,"is":93}],
-214: [function(require, module, exports) {
+208: [function(require, module, exports) {
 
 /**
  * Module dependencies.
  */
 
-var toFunction = require('to-function');
-
-/**
- * Map the given `arr` with callback `fn(val, i)`.
- *
- * @param {Array} arr
- * @param {Function} fn
- * @return {Array}
- * @api public
- */
-
-module.exports = function(arr, fn){
-  var ret = [];
-  fn = toFunction(fn);
-  for (var i = 0; i < arr.length; ++i) {
-    ret.push(fn(arr[i], i));
-  }
-  return ret;
-};
-}, {"to-function":176}],
-208: [function(require, module, exports) {
-
-var debug = require('debug')('analytics:user');
 var Entity = require('./entity');
-var inherit = require('inherit');
 var bind = require('bind');
 var cookie = require('./cookie');
-var uuid = require('uuid');
+var debug = require('debug')('analytics:user');
+var inherit = require('inherit');
 var rawCookie = require('cookie');
+var uuid = require('uuid');
 
 
 /**
@@ -19474,7 +19597,7 @@ User.defaults = {
  * @param {Object} options
  */
 
-function User (options) {
+function User(options) {
   this.defaults = User.defaults;
   this.debug = debug;
   Entity.call(this, options);
@@ -19488,75 +19611,80 @@ function User (options) {
 inherit(User, Entity);
 
 /**
- * Set / get the user id.
+ * Set/get the user id.
  *
- * When the user id changes, the method will
- * reset his anonymousId to a new one.
+ * When the user id changes, the method will reset his anonymousId to a new one.
  *
- * Example:
- *
- *      // didn't change because the user didn't have previous id.
- *      anonId = user.anonymousId();
- *      user.id('foo');
- *      assert.equal(anonId, user.anonymousId());
- *
- *      // didn't change because the user id changed to null.
- *      anonId = user.anonymousId();
- *      user.id('foo');
- *      user.id(null);
- *      assert.equal(anonId, user.anonymousId());
- *
- *     // change because the user had previous id.
- *     anonId = user.anonymousId();
- *     user.id('foo');
- *     user.id('baz'); // triggers change
- *     user.id('baz'); // no change
- *     assert.notEqual(anonId, user.anonymousId());
- *
- * @param {String} id
+ * // FIXME: What are the mixed types?
+ * @param {string} id
  * @return {Mixed}
+ * @example
+ * // didn't change because the user didn't have previous id.
+ * anonymousId = user.anonymousId();
+ * user.id('foo');
+ * assert.equal(anonymousId, user.anonymousId());
+ *
+ * // didn't change because the user id changed to null.
+ * anonymousId = user.anonymousId();
+ * user.id('foo');
+ * user.id(null);
+ * assert.equal(anonymousId, user.anonymousId());
+ *
+ * // change because the user had previous id.
+ * anonymousId = user.anonymousId();
+ * user.id('foo');
+ * user.id('baz'); // triggers change
+ * user.id('baz'); // no change
+ * assert.notEqual(anonymousId, user.anonymousId());
  */
 
 User.prototype.id = function(id){
   var prev = this._getId();
   var ret = Entity.prototype.id.apply(this, arguments);
-  if (null == prev) return ret;
+  if (prev == null) return ret;
+  // FIXME: We're relying on coercion here (1 == "1"), but our API treats these
+  // two values differently. Figure out what will break if we remove this and
+  // change to strict equality
+  /* eslint-disable eqeqeq */
   if (prev != id && id) this.anonymousId(null);
+  /* eslint-enable eqeqeq */
   return ret;
 };
 
 /**
  * Set / get / remove anonymousId.
  *
- * @param {String} anonId
+ * @param {String} anonymousId
  * @return {String|User}
  */
 
-User.prototype.anonymousId = function(anonId){
+User.prototype.anonymousId = function(anonymousId){
   var store = this.storage();
 
   // set / remove
   if (arguments.length) {
-    store.set('ajs_anonymous_id', anonId);
+    store.set('ajs_anonymous_id', anonymousId);
     return this;
   }
 
   // new
-  if (anonId = store.get('ajs_anonymous_id')) {
-    return anonId;
+  anonymousId = store.get('ajs_anonymous_id');
+  if (anonymousId) {
+    return anonymousId;
   }
 
   // old - it is not stringified so we use the raw cookie.
-  if (anonId = rawCookie('_sio')) {
-    anonId = anonId.split('----')[0];
-    store.set('ajs_anonymous_id', anonId);
+  anonymousId = rawCookie('_sio');
+  if (anonymousId) {
+    anonymousId = anonymousId.split('----')[0];
+    store.set('ajs_anonymous_id', anonymousId);
     store.remove('_sio');
-    return anonId;
+    return anonymousId;
   }
 
   // empty
-  anonId = uuid();
-  store.set('ajs_anonymous_id', anonId);
+  anonymousId = uuid();
+  store.set('ajs_anonymous_id', anonymousId);
   return store.get('ajs_anonymous_id');
 };
 
@@ -19573,7 +19701,7 @@ User.prototype.logout = function(){
  * Load saved user `id` or `traits` from storage.
  */
 
-User.prototype.load = function () {
+User.prototype.load = function() {
   if (this._loadOldCookie()) return;
   Entity.prototype.load.call(this);
 };
@@ -19582,11 +19710,11 @@ User.prototype.load = function () {
 /**
  * BACKWARDS COMPATIBILITY: Load the old user from the cookie.
  *
- * @return {Boolean}
  * @api private
+ * @return {boolean}
  */
 
-User.prototype._loadOldCookie = function () {
+User.prototype._loadOldCookie = function() {
   var user = cookie.get(this._options.cookie.oldKey);
   if (!user) return false;
 
@@ -19610,7 +19738,7 @@ module.exports = bind.all(new User());
 
 module.exports.User = User;
 
-}, {"debug":192,"./entity":211,"inherit":212,"bind":196,"./cookie":197,"uuid":186,"cookie":185}],
+}, {"./entity":211,"bind":196,"./cookie":197,"debug":192,"inherit":212,"cookie":185,"uuid":186}],
 5: [function(require, module, exports) {
 module.exports = {
   "name": "analytics",
